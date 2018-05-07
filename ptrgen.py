@@ -40,6 +40,7 @@ from anikattu.tokenstring import TokenString
 from anikattu.utilz import LongVar, Var, init_hidden
 import numpy as np
 
+import glob
 
 SELF_NAME = os.path.basename(__file__).replace('.py', '')
 
@@ -49,35 +50,38 @@ def load_squad_data(data_path, ids, max_para_len=600, max_ans_len=10, max_sample
     skipped = 0
 
     vocabulary = defaultdict(int)
-    dataset = list(open('dataset/en-10k/qa1_single-supporting-fact_train.txt').readlines())
+    
     try:
-        index, story_size = 0, 15
-        while index < len(dataset):
-            sample =  dataset[index: index+story_size]
-            story = ''
-            questions, answers = [], []
-            for i, line in enumerate(sample):
-                line = ' '.join(line.split(' ', 1)[1:])
-                print(i, line)
-                if not (i + 1) % 3:
+        for i, file_ in enumerate(glob.glob('dataset/en-10k/qa*_train.txt')):
+            dataset = open(file_).readlines()
+            prev_linenum = 1000000
+            for line in dataset:
+                questions, answers = [], []
+                linenum, line = line.split(' ', 1)
+
+                linenum = int(linenum)
+                if prev_linenum > linenum:
+                    story = ''
+
+                if '?' in line:
                     q, a, _ = line.split('\t')
 
                     samples.append(
-                    Sample('{}.{}'.format(index/story_size, i),
-                           index/story_size, i,
-                           TokenString(story, word_tokenize),
-                           TokenString(q,     word_tokenize),
-                           TokenString(a,     word_tokenize))
-                    )
+                        Sample('{}.{}'.format(i, linenum),
+                               i, linenum,
+                               TokenString(story, word_tokenize),
+                               TokenString(q,     word_tokenize),
+                               TokenString(a,     word_tokenize))
+                        )
 
                 else:
                     story += ' ' + line
 
-            index += story_size
-                    
+                prev_linenum = linenum
+
     except:
         skipped += 1
-        log.exception('{}'.format(index/story_size))
+        log.exception('{}'.format(i, linenum))
 
     print('skipped {} samples'.format(skipped))
     samples = sorted(samples, key=lambda x: -len(x.a + x.story))
