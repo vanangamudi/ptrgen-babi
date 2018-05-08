@@ -223,20 +223,20 @@ def batchop(datapoints, WORD2INDEX, *args, **kwargs):
     UNK = WORD2INDEX['UNK']
     extvocab_size = 0
     for d in datapoints:
-        story.append([WORD2INDEX[w] for w in d.story] )
-        question.append([WORD2INDEX[w] for w in d.q])
+        story.append([WORD2INDEX[w] for w in d.story] + [WORD2INDEX['EOS']])
+        question.append([WORD2INDEX[w] for w in d.q] + [WORD2INDEX['EOS']])
         
-        answer.append([WORD2INDEX[w] for w in d.a])
+        answer.append([WORD2INDEX[w] for w in d.a] + [WORD2INDEX['EOS']])
 
         oov = build_oov(d, WORD2INDEX)
         extvocab_story.append(
             [ oov.index(w) + len(WORD2INDEX) if WORD2INDEX[w] == UNK else WORD2INDEX[w]
-              for w in d.story]
+              for w in d.story] + [WORD2INDEX['EOS']]
         )
         
         extvocab_answer.append(
             [ oov.index(w) + len(WORD2INDEX) if WORD2INDEX[w] == UNK else WORD2INDEX[w]
-                                 for w in d.a]
+              for w in d.a] + [WORD2INDEX['EOS']]
         )
 
         extvocab_size = max(extvocab_size, len(oov))
@@ -465,9 +465,9 @@ def experiment(VOCAB, raw_samples, datapoints=[[], []], eons=1000, epochs=10, ch
         name = os.path.basename(__file__).replace('.py', '')
         
         _batchop = partial(batchop, WORD2INDEX=VOCAB)
-        train_feed     = DataFeed(name, datapoints[0], batchop=_batchop, batch_size=30)
-        test_feed      = DataFeed(name, datapoints[1], batchop=_batchop, batch_size=10)
-        predictor_feed = DataFeed(name, datapoints[1], batchop=_batchop, batch_size=10)
+        train_feed     = DataFeed(name, datapoints[0], batchop=_batchop, batch_size=100)
+        test_feed      = DataFeed(name, datapoints[1], batchop=_batchop, batch_size=100)
+        predictor_feed = DataFeed(name, datapoints[1], batchop=_batchop, batch_size=100)
 
         _loss = partial(loss, loss_function=nn.NLLLoss(), UNK=VOCAB['UNK'])
         _accuracy = partial(accuracy,  UNK=VOCAB['UNK'])
@@ -491,7 +491,7 @@ def experiment(VOCAB, raw_samples, datapoints=[[], []], eons=1000, epochs=10, ch
             dump.write('#========================after eon: {}\n'.format(e))
             results = ListTable()
             for ri in tqdm(range(predictor_feed.num_batch//10)):
-                output, _results = predictor.predict(ri, 1)
+                output, _results = predictor.predict(predictor_feed.num_batch - ri, 3)
                 results.extend(_results)
                 
             dump.write(repr(results))
@@ -527,9 +527,13 @@ if __name__ == '__main__':
         
     log.info('dataset size: {}'.format(len(dataset)))
     log.info('dataset[:10]: {}'.format(pformat(dataset[0])))
-    log.info('vocabulary: {}'.format(vocabulary))
+    log.info('vocabulary: {}'.format(
+        pformat(
+            sorted(
+                vocabulary.items(), key=lambda x: x[1], reverse=True)
+        )))
     
-    VOCAB = Vocab(vocabulary, VOCAB, max_size=Config.vocab_limit, freq_threshold=1)
+    VOCAB = Vocab(vocabulary, VOCAB, freq_threshold=100)
     pprint(VOCAB.word2index)
     if 'train' in sys.argv:
         labelled_samples = [d for d in dataset if len(d.a) > 0] #[:100]
